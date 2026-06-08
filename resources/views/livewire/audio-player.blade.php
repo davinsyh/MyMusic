@@ -251,8 +251,8 @@
         </div>
     </template>
 
-    <!-- Hidden YouTube Player -->
-    <div style="position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none;">
+    <!-- Hidden YouTube Player (Harus berada di dalam viewport agar tidak dipause otomatis oleh YouTube, jadi ditaruh di balik elemen lain) -->
+    <div style="position: absolute; top: 0; left: 0; width: 300px; height: 300px; z-index: -9999; opacity: 0; pointer-events: none;">
         <div id="yt-player-container"></div>
     </div>
 
@@ -300,10 +300,11 @@
 
                 createYTPlayer() {
                     window.ytPlayer = new YT.Player('yt-player-container', {
-                        height: '1',
-                        width: '1',
+                        height: '300',
+                        width: '300',
                         videoId: '',
                         playerVars: {
+                            'autoplay': 1,
                             'playsinline': 1,
                             'controls': 0,
                             'disablekb': 1,
