@@ -176,10 +176,27 @@ document.addEventListener('alpine:init', () => {
 
         async playTrack(track) {
             this.currentTrack = track;
-            const trackId = track.id || track.videoId;
+            const rawId = track.id || track.videoId;
 
             if (this.ytInterval) clearInterval(this.ytInterval);
             if (this.mockInterval) clearInterval(this.mockInterval);
+
+            // Resolve YouTube Music internal IDs (lp-, lm- prefix) ke video ID biasa
+            let trackId = rawId;
+            if (rawId && (rawId.startsWith('lp-') || rawId.startsWith('lm-'))) {
+                try {
+                    const res = await fetch(`/api/music/resolve/${rawId}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        trackId = data.videoId || rawId;
+                        console.log('[YT] Resolved', rawId, '->', trackId);
+                    }
+                } catch (e) {
+                    // Fallback: strip prefix
+                    trackId = rawId.substring(3);
+                    console.warn('[YT] Resolve gagal, pakai fallback:', trackId);
+                }
+            }
 
             console.log('[YT] Mencoba memutar trackId:', trackId);
             console.log('[YT] ytPlayerReady:', this.ytPlayerReady, '| window.ytPlayer:', window.ytPlayer);
@@ -195,7 +212,7 @@ document.addEventListener('alpine:init', () => {
                     retries++;
                     if (window.ytPlayer && typeof window.ytPlayer.loadVideoById === 'function') {
                         console.log('[YT] Player siap setelah', retries, 'percobaan, memutar...');
-                        window.ytPlayer.loadVideoById(trackId);
+                        window.ytPlayer.loadVideoById(this.pendingTrackId || trackId);
                         this.pendingTrackId = null;
                         clearInterval(retryInterval);
                     } else if (retries >= 15) {

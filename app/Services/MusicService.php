@@ -136,4 +136,30 @@ class MusicService
             }
         });
     }
+
+    /**
+     * Resolve YouTube Music internal ID (lp-, lm-) to actual YouTube video ID.
+     */
+    public function resolveVideoId(string $id)
+    {
+        $cacheKey = 'ytmusic:resolve:' . $id;
+
+        return Cache::remember($cacheKey, now()->addDays(7), function () use ($id) {
+            try {
+                $response = Http::timeout(8)->get($this->baseUrl . '/resolve/' . $id);
+
+                if ($response->successful()) {
+                    return $response->json();
+                }
+
+                // Fallback: strip prefix
+                $videoId = preg_match('/^(lp-|lm-)(.+)$/', $id, $m) ? $m[2] : $id;
+                return ['videoId' => $videoId, 'resolved' => false];
+            } catch (\Exception $e) {
+                Log::error('Python Microservice Resolve Error: ' . $e->getMessage());
+                $videoId = preg_match('/^(lp-|lm-)(.+)$/', $id, $m) ? $m[2] : $id;
+                return ['videoId' => $videoId, 'resolved' => false];
+            }
+        });
+    }
 }

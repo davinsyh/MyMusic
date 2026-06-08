@@ -356,3 +356,38 @@ def get_playlist_details(playlist_id: str):
         logger.error(f"Playlist error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.get("/resolve/{video_id}")
+def resolve_video_id(video_id: str):
+    """
+    Converts YouTube Music internal IDs (like lp-XXXX) to actual YouTube video IDs.
+    This is needed because IFrame API only accepts standard YouTube video IDs.
+    """
+    cache_key = f"resolve:{video_id}"
+    cached_data = get_cached(cache_key)
+    if cached_data:
+        return cached_data
+
+    # If not an internal ID, return as-is
+    if not video_id.startswith('lp-') and not video_id.startswith('lm-'):
+        result = {"videoId": video_id, "resolved": False}
+        set_cached(cache_key, result, ex=86400)
+        return result
+
+    try:
+        # Strip the prefix to get the underlying ID
+        underlying_id = video_id[3:]  # Remove "lp-" or "lm-"
+
+        # Try to get song details using ytmusicapi
+        song_info = ytmusic.get_song(underlying_id)
+        resolved_id = song_info.get('videoDetails', {}).get('videoId', underlying_id)
+
+        result = {"videoId": resolved_id, "resolved": True, "originalId": video_id}
+        set_cached(cache_key, result, ex=86400)
+        return result
+    except Exception as e:
+        logger.warning(f"Could not resolve {video_id}, using stripped ID. Error: {e}")
+        # Fallback: just strip the prefix
+        result = {"videoId": video_id[3:], "resolved": False, "originalId": video_id}
+        set_cached(cache_key, result, ex=3600)
+        return result

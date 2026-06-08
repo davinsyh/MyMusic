@@ -32,3 +32,8 @@ Route::middleware(['auth', 'admin'])->group(function () {
 Route::get('/api/track/{id}', function ($id, \App\Services\MusicService $musicService) {
     return response()->json($musicService->getTrack($id));
 });
+
+// Resolve YouTube Music internal ID to real YouTube video ID
+Route::get('/api/music/resolve/{id}', function ($id, \App\Services\MusicService $musicService) {
+    return response()->json($musicService->resolveVideoId($id));
+});
