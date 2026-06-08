@@ -2,3 +2,5 @@ fastapi
 uvicorn
 ytmusicapi
 redis
+yt-dlp
+requests
