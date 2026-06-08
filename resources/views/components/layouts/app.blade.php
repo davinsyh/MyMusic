@@ -26,6 +26,8 @@
             document.documentElement.classList.add('dark');
         }
     </script>
+    <!-- YouTube IFrame API (dimuat di sini agar stabil, tidak terganggu Livewire) -->
+    <script src="https://www.youtube.com/iframe_api"></script>
 </head>
 <body class="font-body-md text-on-surface bg-background" x-data="{ showLoginModal: {{ $errors->has('login') || $errors->has('password') || session('showLoginModal') ? 'true' : 'false' }}, showRegisterModal: false, showOtpModal: false, sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true', darkMode: localStorage.getItem('darkMode') === 'true' || (!('darkMode' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches) }" x-effect="localStorage.setItem('sidebarCollapsed', sidebarCollapsed); localStorage.setItem('darkMode', darkMode); document.documentElement.classList.toggle('dark', darkMode)">
     <!-- Sidebar Navigation -->

@@ -251,8 +251,8 @@
         </div>
     </template>
 
-    <!-- Hidden YouTube Player (Harus berada di dalam viewport agar tidak dipause otomatis oleh YouTube, jadi ditaruh di balik elemen lain) -->
-    <div style="position: absolute; top: 0; left: 0; width: 300px; height: 300px; z-index: -9999; opacity: 0; pointer-events: none;">
+    <!-- Hidden YouTube Player -->
+    <div style="position: absolute; top: 0; left: 0; width: 300px; height: 168px; z-index: -9999; opacity: 0.01; pointer-events: none;">
         <div id="yt-player-container"></div>
     </div>
 
@@ -272,6 +272,9 @@
                 volume: 100,
                 isSaved: false,
                 hoverTime: '',
+                ytPlayerReady: false,
+                ytInterval: null,
+                mockInterval: null,
                 isShuffle: false,
                 repeatMode: 0,
 
@@ -283,19 +286,18 @@
                 },
 
                 initPlayer() {
-                    // Check if YT is already loaded
-                    if (window.YT && window.YT.Player) {
-                        this.createYTPlayer();
-                    } else {
-                        const tag = document.createElement('script');
-                        tag.src = "https://www.youtube.com/iframe_api";
-                        const firstScriptTag = document.getElementsByTagName('script')[0];
-                        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-                        
-                        window.onYouTubeIframeAPIReady = () => {
-                            this.createYTPlayer();
-                        };
-                    }
+                    const self = this;
+                    
+                    const tryCreatePlayer = () => {
+                        if (window.YT && window.YT.Player) {
+                            self.createYTPlayer();
+                        } else {
+                            // Tunggu sampai API siap
+                            window.onYouTubeIframeAPIReady = () => self.createYTPlayer();
+                        }
+                    };
+                    
+                    tryCreatePlayer();
                 },
 
                 createYTPlayer() {
