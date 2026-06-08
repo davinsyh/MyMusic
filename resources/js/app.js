@@ -21,6 +21,7 @@ document.addEventListener('alpine:init', () => {
         pendingTrackId: null,
         isShuffle: false,
         repeatMode: 0,
+        _altSkipIds: [],
 
         init() {
             this.initPlayer();
@@ -30,6 +31,15 @@ document.addEventListener('alpine:init', () => {
         },
 
         initPlayer() {
+            // Guard: hanya buat player sekali secara global
+            if (window._ytPlayerInit) {
+                // Player sudah ada, sinkronkan state
+                if (window.ytPlayer && typeof window.ytPlayer.loadVideoById === 'function') {
+                    this.ytPlayerReady = true;
+                }
+                return;
+            }
+
             const self = this;
             const tryCreatePlayer = () => {
                 if (window.YT && window.YT.Player) {
@@ -42,14 +52,19 @@ document.addEventListener('alpine:init', () => {
         },
 
         createYTPlayer() {
-            if (window.ytPlayer && typeof window.ytPlayer.loadVideoById === 'function') {
-                this.ytPlayerReady = true;
-                if (this.pendingTrackId) {
-                    window.ytPlayer.loadVideoById(this.pendingTrackId);
-                    this.pendingTrackId = null;
+            // Guard: cegah pembuatan player ganda
+            if (window._ytPlayerInit) {
+                if (window.ytPlayer && typeof window.ytPlayer.loadVideoById === 'function') {
+                    this.ytPlayerReady = true;
+                    if (this.pendingTrackId) {
+                        window.ytPlayer.loadVideoById(this.pendingTrackId);
+                        this.pendingTrackId = null;
+                    }
                 }
                 return;
             }
+            window._ytPlayerInit = true;
+
             window.ytPlayer = new YT.Player('yt-player-container', {
                 height: '300',
                 width: '300',
@@ -72,46 +87,70 @@ document.addEventListener('alpine:init', () => {
         },
 
         onPlayerError(event) {
-            // Error codes:
-            // 2   = Invalid video ID
-            // 5   = HTML5 player error
-            // 100 = Video not found / private
-            // 101 = Embedding not allowed
-            // 150 = Embedding not allowed (same as 101)
             console.warn('[YT] Player Error code:', event.data, '| Track:', this.currentTrack?.title);
 
             if ((event.data === 150 || event.data === 101 || event.data === 100) && this.currentTrack) {
-                // Video tidak bisa di-embed, cari alternatif
-                console.log('[YT] Mencari alternatif untuk:', this.currentTrack.title);
+                console.log('[YT] Mencari alternatif untuk:', this.currentTrack.title, '| Skip:', this._altSkipIds);
                 this.searchAndPlayAlternative(this.currentTrack);
             } else {
-                this.mockPlay();
+                // Error lain (2=invalid ID, 5=HTML5 error) - skip ke lagu berikutnya
+                this._altSkipIds = [];
+                this.nextTrack();
             }
         },
 
         async searchAndPlayAlternative(track) {
+            const currentId = track.id || track.videoId;
+            // Tambahkan ID yang gagal ke daftar skip
+            if (!this._altSkipIds.includes(currentId)) {
+                this._altSkipIds.push(currentId);
+            }
+
+            // Maksimal 5 percobaan
+            if (this._altSkipIds.length > 5) {
+                console.warn('[YT] Sudah mencoba', this._altSkipIds.length, 'video, skip ke lagu berikutnya');
+                this._altSkipIds = [];
+                this.nextTrack();
+                return;
+            }
+
             try {
-                const query = encodeURIComponent(`${track.title} ${track.artist}`);
+                // Cari dengan kata kunci berbeda setiap percobaan untuk hasil bervariasi
+                const attempts = [
+                    `${track.title} ${track.artist}`,
+                    `${track.title} ${track.artist} official`,
+                    `${track.title} ${track.artist} lyrics`,
+                    `${track.title} ${track.artist} audio`,
+                    `${track.title} official music video`,
+                ];
+                const attemptIdx = Math.min(this._altSkipIds.length - 1, attempts.length - 1);
+                const query = encodeURIComponent(attempts[attemptIdx]);
+
                 const res = await fetch(`/api/music/search?q=${query}`);
                 if (!res.ok) throw new Error('Search failed');
                 const data = await res.json();
 
-                // Cari video ID yang berbeda dari yang gagal
-                const currentId = track.id || track.videoId;
                 const alternatives = (data.data || []).filter(r =>
-                    r.id && r.id !== currentId && !r.id.startsWith('lp-') && !r.id.startsWith('lm-')
+                    r.id &&
+                    !this._altSkipIds.includes(r.id) &&
+                    !r.id.startsWith('lp-') &&
+                    !r.id.startsWith('lm-') &&
+                    r.id.length === 11  // YouTube video ID standar = 11 karakter
                 );
 
                 if (alternatives.length > 0) {
-                    const altId = alternatives[0].id;
-                    console.log('[YT] Mencoba alternatif:', altId, '|', alternatives[0].title);
-                    window.ytPlayer.loadVideoById(altId);
+                    const alt = alternatives[0];
+                    console.log('[YT] Mencoba alternatif ke-' + this._altSkipIds.length + ':', alt.id, '|', alt.title);
+                    this._altSkipIds.push(alt.id);
+                    window.ytPlayer.loadVideoById(alt.id);
                 } else {
                     console.warn('[YT] Tidak ada alternatif, skip ke lagu berikutnya');
+                    this._altSkipIds = [];
                     this.nextTrack();
                 }
             } catch (e) {
                 console.error('[YT] Gagal mencari alternatif:', e);
+                this._altSkipIds = [];
                 this.nextTrack();
             }
         },
@@ -129,6 +168,7 @@ document.addEventListener('alpine:init', () => {
         onPlayerStateChange(event) {
             if (event.data == YT.PlayerState.PLAYING) {
                 this.isPlaying = true;
+                this._altSkipIds = []; // Reset saat lagu berhasil diputar
                 this.duration = window.ytPlayer.getDuration();
                 if (this.ytInterval) clearInterval(this.ytInterval);
                 this.ytInterval = setInterval(() => {
