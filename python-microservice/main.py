@@ -92,19 +92,28 @@ def get_track(video_id: str):
         return {"source": "cache", "data": cached_data}
 
     try:
-        # Gunakan Piped API untuk mem-bypass blokir IP AWS
-        try:
-            res = requests.get(f"https://pipedapi.kavin.rocks/streams/{video_id}", timeout=10)
-            stream_data = res.json()
-            audio_streams = stream_data.get('audioStreams', [])
-            if audio_streams:
-                audio_streams.sort(key=lambda x: x.get('bitrate', 0), reverse=True)
-                stream_url = audio_streams[0]['url']
-            else:
-                stream_url = None
-        except Exception as e:
-            logger.error(f"Piped API error: {e}")
-            stream_url = None
+        PIPED_INSTANCES = [
+            "https://pipedapi.kavin.rocks",
+            "https://pipedapi.tokhmi.xyz",
+            "https://pipedapi.adminforge.de",
+            "https://api.piped.projectsegfau.lt",
+            "https://pipedapi.smnz.de"
+        ]
+        
+        stream_url = None
+        for instance in PIPED_INSTANCES:
+            try:
+                res = requests.get(f"{instance}/streams/{video_id}", timeout=5)
+                if res.status_code == 200:
+                    stream_data = res.json()
+                    audio_streams = stream_data.get('audioStreams', [])
+                    if audio_streams:
+                        audio_streams.sort(key=lambda x: x.get('bitrate', 0), reverse=True)
+                        stream_url = audio_streams[0]['url']
+                        break
+            except Exception as e:
+                logger.warning(f"Failed with {instance}: {e}")
+                continue
         
         song_info = ytmusic.get_song(video_id)
         
@@ -131,15 +140,27 @@ from fastapi import Request
 @app.get("/stream/{video_id}")
 def stream_audio(video_id: str, request: Request):
     try:
-        # Gunakan Piped API untuk mem-bypass blokir IP AWS
-        res = requests.get(f"https://pipedapi.kavin.rocks/streams/{video_id}", timeout=10)
-        stream_data = res.json()
-        audio_streams = stream_data.get('audioStreams', [])
+        PIPED_INSTANCES = [
+            "https://pipedapi.kavin.rocks",
+            "https://pipedapi.tokhmi.xyz",
+            "https://pipedapi.adminforge.de",
+            "https://api.piped.projectsegfau.lt",
+            "https://pipedapi.smnz.de"
+        ]
         
         url = None
-        if audio_streams:
-            audio_streams.sort(key=lambda x: x.get('bitrate', 0), reverse=True)
-            url = audio_streams[0]['url']
+        for instance in PIPED_INSTANCES:
+            try:
+                res = requests.get(f"{instance}/streams/{video_id}", timeout=5)
+                if res.status_code == 200:
+                    stream_data = res.json()
+                    audio_streams = stream_data.get('audioStreams', [])
+                    if audio_streams:
+                        audio_streams.sort(key=lambda x: x.get('bitrate', 0), reverse=True)
+                        url = audio_streams[0]['url']
+                        break
+            except Exception:
+                continue
             
         if not url:
             raise HTTPException(status_code=404, detail="Stream URL not found")
