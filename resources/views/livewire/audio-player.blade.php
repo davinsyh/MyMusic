@@ -252,7 +252,9 @@
     </template>
 
     <!-- Hidden YouTube Player -->
-    <div id="yt-player-container" class="hidden"></div>
+    <div style="position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none;">
+        <div id="yt-player-container"></div>
+    </div>
 
     <script>
         document.addEventListener('alpine:init', () => {
@@ -281,30 +283,49 @@
                 },
 
                 initPlayer() {
-                    const tag = document.createElement('script');
-                    tag.src = "https://www.youtube.com/iframe_api";
-                    const firstScriptTag = document.getElementsByTagName('script')[0];
-                    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-                    
-                    window.onYouTubeIframeAPIReady = () => {
-                        window.ytPlayer = new YT.Player('yt-player-container', {
-                            height: '0',
-                            width: '0',
-                            videoId: '',
-                            playerVars: {
-                                'playsinline': 1,
-                                'controls': 0,
-                                'disablekb': 1
-                            },
-                            events: {
-                                'onReady': this.onPlayerReady.bind(this),
-                                'onStateChange': this.onPlayerStateChange.bind(this)
-                            }
-                        });
-                    };
+                    // Check if YT is already loaded
+                    if (window.YT && window.YT.Player) {
+                        this.createYTPlayer();
+                    } else {
+                        const tag = document.createElement('script');
+                        tag.src = "https://www.youtube.com/iframe_api";
+                        const firstScriptTag = document.getElementsByTagName('script')[0];
+                        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+                        
+                        window.onYouTubeIframeAPIReady = () => {
+                            this.createYTPlayer();
+                        };
+                    }
+                },
+
+                createYTPlayer() {
+                    window.ytPlayer = new YT.Player('yt-player-container', {
+                        height: '1',
+                        width: '1',
+                        videoId: '',
+                        playerVars: {
+                            'playsinline': 1,
+                            'controls': 0,
+                            'disablekb': 1,
+                            'fs': 0,
+                            'rel': 0,
+                            'modestbranding': 1
+                        },
+                        events: {
+                            'onReady': this.onPlayerReady.bind(this),
+                            'onStateChange': this.onPlayerStateChange.bind(this),
+                            'onError': this.onPlayerError.bind(this)
+                        }
+                    });
+                },
+
+                onPlayerError(event) {
+                    console.error("YouTube Player Error:", event.data);
+                    this.mockPlay();
                 },
 
                 onPlayerReady(event) {
+                    this.ytPlayerReady = true;
                     window.ytPlayer.setVolume(this.volume);
                 },
 
@@ -403,8 +424,18 @@
                     @this.call('recordHistory', trackId, track.title, track.artist, track.thumbnail);
                     this.isSaved = await this.$wire.checkIsSaved(trackId);
 
-                    if (window.ytPlayer && window.ytPlayer.loadVideoById) {
+                    if (this.ytPlayerReady && window.ytPlayer && window.ytPlayer.loadVideoById) {
                         window.ytPlayer.loadVideoById(trackId);
+                    } else {
+                        // Jika player belum siap, coba lagi setelah 500ms
+                        setTimeout(() => {
+                            if (this.ytPlayerReady && window.ytPlayer && window.ytPlayer.loadVideoById) {
+                                window.ytPlayer.loadVideoById(trackId);
+                            } else {
+                                console.error("YouTube Player gagal diinisialisasi.");
+                                this.mockPlay();
+                            }
+                        }, 500);
                     }
                 },
 
