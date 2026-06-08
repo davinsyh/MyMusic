@@ -92,22 +92,23 @@ def get_track(video_id: str):
         return {"source": "cache", "data": cached_data}
 
     try:
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'quiet': True,
-            'no_warnings': True,
-            'skip_download': True,
-            'extractor_args': {'youtube': ['player_client=android']}
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_id, download=False)
-            stream_url = info['url'] if 'url' in info else None
+        # Gunakan Piped API untuk mem-bypass blokir IP AWS
+        try:
+            res = requests.get(f"https://pipedapi.kavin.rocks/streams/{video_id}", timeout=10)
+            stream_data = res.json()
+            audio_streams = stream_data.get('audioStreams', [])
+            if audio_streams:
+                audio_streams.sort(key=lambda x: x.get('bitrate', 0), reverse=True)
+                stream_url = audio_streams[0]['url']
+            else:
+                stream_url = None
+        except Exception as e:
+            logger.error(f"Piped API error: {e}")
+            stream_url = None
         
         song_info = ytmusic.get_song(video_id)
         
-        # We will use our own proxy endpoint for the stream_url to avoid browser 403 errors
-        stream_url = f"http://127.0.0.1:8001/stream/{video_id}"
-        
+        # Kita langsung berikan Piped URL ke frontend agar tidak membebani server AWS
         data = {
             "id": video_id,
             "title": song_info['videoDetails']['title'],
@@ -130,16 +131,15 @@ from fastapi import Request
 @app.get("/stream/{video_id}")
 def stream_audio(video_id: str, request: Request):
     try:
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'quiet': True,
-            'no_warnings': True,
-            'skip_download': True,
-            'extractor_args': {'youtube': ['player_client=android']}
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_id, download=False)
-            url = info['url'] if 'url' in info else None
+        # Gunakan Piped API untuk mem-bypass blokir IP AWS
+        res = requests.get(f"https://pipedapi.kavin.rocks/streams/{video_id}", timeout=10)
+        stream_data = res.json()
+        audio_streams = stream_data.get('audioStreams', [])
+        
+        url = None
+        if audio_streams:
+            audio_streams.sort(key=lambda x: x.get('bitrate', 0), reverse=True)
+            url = audio_streams[0]['url']
             
         if not url:
             raise HTTPException(status_code=404, detail="Stream URL not found")
