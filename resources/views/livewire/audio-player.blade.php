@@ -251,9 +251,8 @@
         </div>
     </template>
 
-    <!-- Hidden HTML5 Audio Element -->
-    <audio x-ref="audioEl" @timeupdate="updateProgress" @ended="trackEnded" @loadedmetadata="setDuration"
-        @play="isPlaying = true" @pause="isPlaying = false"></audio>
+    <!-- Hidden YouTube Player -->
+    <div id="yt-player-container" class="hidden"></div>
 
     <script>
         document.addEventListener('alpine:init', () => {
@@ -268,17 +267,66 @@
                 currentTime: 0,
                 duration: 0,
                 progress: 0,
-                volume: 1,
+                volume: 100,
                 isSaved: false,
                 hoverTime: '',
                 isShuffle: false,
-                repeatMode: 0, // 0: off, 1: all, 2: one
+                repeatMode: 0,
 
                 init() {
-                    this.$refs.audioEl.volume = this.volume;
+                    this.initPlayer();
                     window.addEventListener('play-queue', (e) => {
                         this.playQueue(e.detail);
                     });
+                },
+
+                initPlayer() {
+                    const tag = document.createElement('script');
+                    tag.src = "https://www.youtube.com/iframe_api";
+                    const firstScriptTag = document.getElementsByTagName('script')[0];
+                    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+                    
+                    window.onYouTubeIframeAPIReady = () => {
+                        window.ytPlayer = new YT.Player('yt-player-container', {
+                            height: '0',
+                            width: '0',
+                            videoId: '',
+                            playerVars: {
+                                'playsinline': 1,
+                                'controls': 0,
+                                'disablekb': 1
+                            },
+                            events: {
+                                'onReady': this.onPlayerReady.bind(this),
+                                'onStateChange': this.onPlayerStateChange.bind(this)
+                            }
+                        });
+                    };
+                },
+
+                onPlayerReady(event) {
+                    window.ytPlayer.setVolume(this.volume);
+                },
+
+                onPlayerStateChange(event) {
+                    if (event.data == YT.PlayerState.PLAYING) {
+                        this.isPlaying = true;
+                        this.duration = window.ytPlayer.getDuration();
+                        if (this.ytInterval) clearInterval(this.ytInterval);
+                        this.ytInterval = setInterval(() => {
+                            if (this.isPlaying && window.ytPlayer && window.ytPlayer.getCurrentTime) {
+                                this.currentTime = window.ytPlayer.getCurrentTime();
+                                this.progress = (this.currentTime / this.duration) * 100;
+                            }
+                        }, 1000);
+                    } else if (event.data == YT.PlayerState.PAUSED) {
+                        this.isPlaying = false;
+                        if (this.ytInterval) clearInterval(this.ytInterval);
+                    } else if (event.data == YT.PlayerState.ENDED) {
+                        this.isPlaying = false;
+                        if (this.ytInterval) clearInterval(this.ytInterval);
+                        this.trackEnded();
+                    }
                 },
 
                 playQueue({ queue, index, context = null }) {
@@ -355,99 +403,17 @@
                     @this.call('recordHistory', trackId, track.title, track.artist, track.thumbnail);
                     this.isSaved = await this.$wire.checkIsSaved(trackId);
 
-                    if (this.mockInterval) clearInterval(this.mockInterval);
-
-                    try {
-                        // KUMPULAN SERVER BANTUAN (Dijalankan di Browser User untuk menghindari blokir AWS)
-                        const PIPED_INSTANCES = [
-                            "https://pipedapi.tokhmi.xyz",
-                            "https://pipedapi.kavin.rocks",
-                            "https://pipedapi.adminforge.de",
-                            "https://api.piped.projectsegfau.lt",
-                            "https://pipedapi.smnz.de"
-                        ];
-
-                        let finalStreamUrl = null;
-                        
-                        // Coba satu per satu servernya sampai dapat suaranya
-                        for (let instance of PIPED_INSTANCES) {
-                            try {
-                                const response = await fetch(`${instance}/streams/${trackId}`);
-                                if (!response.ok) continue;
-                                
-                                const data = await response.json();
-                                if (data && data.audioStreams && data.audioStreams.length > 0) {
-                                    // Ambil kualitas suara tertinggi
-                                    data.audioStreams.sort((a, b) => b.bitrate - a.bitrate);
-                                    finalStreamUrl = data.audioStreams[0].url;
-                                    break;
-                                }
-                            } catch (err) {
-                                console.warn("Piped instance failed:", instance);
-                                continue;
-                            }
-                        }
-
-                        if (finalStreamUrl) {
-                            this.$refs.audioEl.src = finalStreamUrl;
-                            this.$refs.audioEl.play();
-                            this.isPlaying = true;
-                        } else {
-                            console.error('Semua server bantuan gagal memberikan lagu');
-                            this.mockPlay();
-                        }
-                    } catch (e) {
-                        console.error("Gagal memutar lagu:", e);
-                        this.mockPlay();
+                    if (window.ytPlayer && window.ytPlayer.loadVideoById) {
+                        window.ytPlayer.loadVideoById(trackId);
                     }
-                },
-
-                mockPlay() {
-                    this.isPlaying = true;
-                    this.duration = 180;
-                    this.currentTime = 0;
-                    this.progress = 0;
-                    this.mockInterval = setInterval(() => {
-                        if (this.isPlaying) {
-                            this.currentTime += 1;
-                            this.progress = (this.currentTime / this.duration) * 100;
-                            if (this.currentTime >= this.duration) {
-                                this.isPlaying = false;
-                                clearInterval(this.mockInterval);
-                                this.trackEnded();
-                            }
-                        }
-                    }, 1000);
                 },
 
                 togglePlay() {
-                    if (!this.currentTrack || !this.$refs.audioEl.src) return;
-                    if (this.$refs.audioEl.paused) {
-                        this.$refs.audioEl.play();
+                    if (!this.currentTrack || !window.ytPlayer) return;
+                    if (this.isPlaying) {
+                        window.ytPlayer.pauseVideo();
                     } else {
-                        this.$refs.audioEl.pause();
-                    }
-                },
-
-                updateProgress() {
-                    if (!this.$refs.audioEl.duration) return;
-                    this.currentTime = this.$refs.audioEl.currentTime;
-                    this.duration = this.$refs.audioEl.duration;
-                    this.progress = (this.currentTime / this.duration) * 100;
-                },
-
-                setDuration() {
-                    this.duration = this.$refs.audioEl.duration;
-                },
-
-                seek(e) {
-                    if (!this.currentTrack) return;
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-                    this.currentTime = this.duration * percent;
-                    this.progress = percent * 100;
-                    if (this.$refs.audioEl.src) {
-                        this.$refs.audioEl.currentTime = this.currentTime;
+                        window.ytPlayer.playVideo();
                     }
                 },
 
@@ -462,8 +428,21 @@
                 setVolume(e) {
                     const rect = e.currentTarget.getBoundingClientRect();
                     const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-                    this.volume = percent;
-                    this.$refs.audioEl.volume = percent;
+                    this.volume = percent * 100;
+                    if (window.ytPlayer && window.ytPlayer.setVolume) {
+                        window.ytPlayer.setVolume(this.volume);
+                    }
+                },
+
+                seek(e) {
+                    if (!this.duration) return;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                    this.currentTime = this.duration * percent;
+                    if (window.ytPlayer && window.ytPlayer.seekTo) {
+                        window.ytPlayer.seekTo(this.currentTime, true);
+                    }
+                    this.progress = percent * 100;
                 },
 
                 formatTime(seconds) {
