@@ -20,9 +20,29 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
+        'username',
         'email',
         'password',
+        'avatar',
+        'role',
+        'theme_preference',
     ];
+
+    /**
+     * Get the play histories for the user.
+     */
+    public function playHistories()
+    {
+        return $this->hasMany(PlayHistory::class);
+    }
+
+    /**
+     * Get the saved libraries for the user.
+     */
+    public function savedLibraries()
+    {
+        return $this->hasMany(SavedLibrary::class);
+    }
 
     /**
      * The attributes that should be hidden for serialization.
