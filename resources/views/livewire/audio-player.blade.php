@@ -275,6 +275,7 @@
                 ytPlayerReady: false,
                 ytInterval: null,
                 mockInterval: null,
+                pendingTrackId: null,
                 isShuffle: false,
                 repeatMode: 0,
 
@@ -301,6 +302,15 @@
                 },
 
                 createYTPlayer() {
+                    // Jangan buat player ganda
+                    if (window.ytPlayer && typeof window.ytPlayer.loadVideoById === 'function') {
+                        this.ytPlayerReady = true;
+                        if (this.pendingTrackId) {
+                            window.ytPlayer.loadVideoById(this.pendingTrackId);
+                            this.pendingTrackId = null;
+                        }
+                        return;
+                    }
                     window.ytPlayer = new YT.Player('yt-player-container', {
                         height: '300',
                         width: '300',
@@ -330,6 +340,12 @@
                 onPlayerReady(event) {
                     this.ytPlayerReady = true;
                     window.ytPlayer.setVolume(this.volume);
+                    console.log('[YT] Player siap!');
+                    // Jika ada lagu yang sudah menunggu, langsung putar
+                    if (this.pendingTrackId) {
+                        window.ytPlayer.loadVideoById(this.pendingTrackId);
+                        this.pendingTrackId = null;
+                    }
                 },
 
                 onPlayerStateChange(event) {
@@ -427,18 +443,35 @@
                     @this.call('recordHistory', trackId, track.title, track.artist, track.thumbnail);
                     this.isSaved = await this.$wire.checkIsSaved(trackId);
 
-                    if (this.ytPlayerReady && window.ytPlayer && window.ytPlayer.loadVideoById) {
+                    if (this.ytInterval) clearInterval(this.ytInterval);
+                    if (this.mockInterval) clearInterval(this.mockInterval);
+
+                    console.log('[YT] Mencoba memutar trackId:', trackId);
+                    console.log('[YT] ytPlayerReady:', this.ytPlayerReady, '| window.ytPlayer:', window.ytPlayer);
+
+                    if (this.ytPlayerReady && window.ytPlayer && typeof window.ytPlayer.loadVideoById === 'function') {
+                        // Player sudah siap, langsung putar
                         window.ytPlayer.loadVideoById(trackId);
                     } else {
-                        // Jika player belum siap, coba lagi setelah 500ms
-                        setTimeout(() => {
-                            if (this.ytPlayerReady && window.ytPlayer && window.ytPlayer.loadVideoById) {
+                        // Simpan dulu, tunggu player siap lewat onPlayerReady
+                        this.pendingTrackId = trackId;
+                        console.log('[YT] Player belum siap, disimpan sebagai pending:', trackId);
+                        
+                        // Fallback: coba paksa setiap 300ms maksimal 5 detik
+                        let retries = 0;
+                        const retryInterval = setInterval(() => {
+                            retries++;
+                            if (window.ytPlayer && typeof window.ytPlayer.loadVideoById === 'function') {
+                                console.log('[YT] Player siap setelah', retries, 'percobaan');
                                 window.ytPlayer.loadVideoById(trackId);
-                            } else {
-                                console.error("YouTube Player gagal diinisialisasi.");
+                                this.pendingTrackId = null;
+                                clearInterval(retryInterval);
+                            } else if (retries >= 15) {
+                                console.error('[YT] Player gagal dimuat setelah 15 percobaan');
+                                clearInterval(retryInterval);
                                 this.mockPlay();
                             }
-                        }, 500);
+                        }, 300);
                     }
                 },
 
