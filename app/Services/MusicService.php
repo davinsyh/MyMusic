@@ -12,7 +12,7 @@ class MusicService
 
     public function __construct()
     {
-        $this->baseUrl = env('PYTHON_MICROSERVICE_URL', 'http://127.0.0.1:8000');
+        $this->baseUrl = env('PYTHON_MICROSERVICE_URL', 'http://127.0.0.1:8001');
     }
 
     /**

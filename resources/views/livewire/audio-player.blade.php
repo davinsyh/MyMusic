@@ -362,7 +362,12 @@
                         const data = await response.json();
 
                         if (data && data.stream_url) {
-                            this.$refs.audioEl.src = data.stream_url;
+                            let finalStreamUrl = data.stream_url;
+                            @if(env('APP_ENV') === 'production')
+                                finalStreamUrl = '/stream/' + trackId;
+                            @endif
+                            
+                            this.$refs.audioEl.src = finalStreamUrl;
                             this.$refs.audioEl.play();
                             this.isPlaying = true;
                         } else {
