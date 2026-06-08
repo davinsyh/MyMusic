@@ -96,7 +96,8 @@ def get_track(video_id: str):
             'format': 'bestaudio/best',
             'quiet': True,
             'no_warnings': True,
-            'skip_download': True
+            'skip_download': True,
+            'extractor_args': {'youtube': ['player_client=android']}
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_id, download=False)
@@ -133,7 +134,8 @@ def stream_audio(video_id: str, request: Request):
             'format': 'bestaudio/best',
             'quiet': True,
             'no_warnings': True,
-            'skip_download': True
+            'skip_download': True,
+            'extractor_args': {'youtube': ['player_client=android']}
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_id, download=False)
