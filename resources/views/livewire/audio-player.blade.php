@@ -1,4 +1,5 @@
 <div x-data="audioPlayer()" x-on:play-track.window="playTrack($event.detail)"
+    x-on:play-queue.window="playQueue($event.detail)"
     class="w-full h-full flex flex-row items-center justify-between" wire:ignore>
 
     <!-- Left: Song Info -->

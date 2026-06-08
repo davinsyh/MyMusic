@@ -22,12 +22,66 @@ document.addEventListener('alpine:init', () => {
         isShuffle: false,
         repeatMode: 0,
         _altSkipIds: [],
+        instanceId: Math.random().toString(36).substring(7),
 
         init() {
-            this.initPlayer();
-            window.addEventListener('play-queue', (e) => {
-                this.playQueue(e.detail);
+            window.activeAudioPlayer = this;
+            console.log('[YT][' + this.instanceId + '] Alpine component init()');
+
+            if (window.musicPlayerState) {
+                // Restore state dari global state
+                this.currentTrack = window.musicPlayerState.currentTrack;
+                this.queue = window.musicPlayerState.queue;
+                this.originalQueue = window.musicPlayerState.originalQueue;
+                this.queueContext = window.musicPlayerState.queueContext;
+                this.currentIndex = window.musicPlayerState.currentIndex;
+                this.isPlaying = window.musicPlayerState.isPlaying;
+                this.currentTime = window.musicPlayerState.currentTime;
+                this.duration = window.musicPlayerState.duration;
+                this.progress = window.musicPlayerState.progress;
+                this.volume = window.musicPlayerState.volume;
+                this.isSaved = window.musicPlayerState.isSaved;
+                this.isShuffle = window.musicPlayerState.isShuffle;
+                this.repeatMode = window.musicPlayerState.repeatMode;
+                this._altSkipIds = window.musicPlayerState._altSkipIds;
+
+                if (this.isPlaying && window.ytPlayer) {
+                    console.log('[YT][' + this.instanceId + '] Lagu sedang terputar, memulai timer update...');
+                    this.startTimer();
+                }
+            } else {
+                // Inisialisasi global state awal
+                window.musicPlayerState = {
+                    currentTrack: this.currentTrack,
+                    queue: this.queue,
+                    originalQueue: this.originalQueue,
+                    queueContext: this.queueContext,
+                    currentIndex: this.currentIndex,
+                    isPlaying: this.isPlaying,
+                    currentTime: this.currentTime,
+                    duration: this.duration,
+                    progress: this.progress,
+                    volume: this.volume,
+                    isSaved: this.isSaved,
+                    isShuffle: this.isShuffle,
+                    repeatMode: this.repeatMode,
+                    _altSkipIds: this._altSkipIds,
+                };
+            }
+
+            // Pasang watchers untuk menyinkronkan state lokal ke global state
+            const keysToSync = [
+                'currentTrack', 'queue', 'originalQueue', 'queueContext', 'currentIndex',
+                'isPlaying', 'currentTime', 'duration', 'progress', 'volume', 'isSaved',
+                'isShuffle', 'repeatMode', '_altSkipIds'
+            ];
+            keysToSync.forEach(key => {
+                this.$watch(key, (value) => {
+                    window.musicPlayerState[key] = value;
+                });
             });
+
+            this.initPlayer();
         },
 
         initPlayer() {
@@ -65,6 +119,7 @@ document.addEventListener('alpine:init', () => {
             }
             window._ytPlayerInit = true;
 
+            console.log('[YT][' + this.instanceId + '] Creating new YT.Player');
             window.ytPlayer = new YT.Player('yt-player-container', {
                 height: '300',
                 width: '300',
@@ -79,18 +134,27 @@ document.addEventListener('alpine:init', () => {
                     'modestbranding': 1
                 },
                 events: {
-                    'onReady': (e) => this.onPlayerReady(e),
-                    'onStateChange': (e) => this.onPlayerStateChange(e),
-                    'onError': (e) => this.onPlayerError(e)
+                    'onReady': (e) => {
+                        console.log('[YT] YT.Player onReady event');
+                        if (window.activeAudioPlayer) window.activeAudioPlayer.onPlayerReady(e);
+                    },
+                    'onStateChange': (e) => {
+                        console.log('[YT] YT.Player onStateChange event, data:', e.data);
+                        if (window.activeAudioPlayer) window.activeAudioPlayer.onPlayerStateChange(e);
+                    },
+                    'onError': (e) => {
+                        console.log('[YT] YT.Player onError event, data:', e.data);
+                        if (window.activeAudioPlayer) window.activeAudioPlayer.onPlayerError(e);
+                    }
                 }
             });
         },
 
         onPlayerError(event) {
-            console.warn('[YT] Player Error code:', event.data, '| Track:', this.currentTrack?.title);
+            console.warn('[YT][' + this.instanceId + '] Player Error code:', event.data, '| Track:', this.currentTrack?.title);
 
             if ((event.data === 150 || event.data === 101 || event.data === 100) && this.currentTrack) {
-                console.log('[YT] Mencari alternatif untuk:', this.currentTrack.title, '| Skip:', this._altSkipIds);
+                console.log('[YT][' + this.instanceId + '] Mencari alternatif untuk:', this.currentTrack.title, '| Skip:', this._altSkipIds);
                 this.searchAndPlayAlternative(this.currentTrack);
             } else {
                 // Error lain (2=invalid ID, 5=HTML5 error) - skip ke lagu berikutnya
@@ -108,7 +172,7 @@ document.addEventListener('alpine:init', () => {
 
             // Maksimal 5 percobaan
             if (this._altSkipIds.length > 5) {
-                console.warn('[YT] Sudah mencoba', this._altSkipIds.length, 'video, skip ke lagu berikutnya');
+                console.warn('[YT][' + this.instanceId + '] Sudah mencoba', this._altSkipIds.length, 'video, skip ke lagu berikutnya');
                 this._altSkipIds = [];
                 this.nextTrack();
                 return;
@@ -140,16 +204,16 @@ document.addEventListener('alpine:init', () => {
 
                 if (alternatives.length > 0) {
                     const alt = alternatives[0];
-                    console.log('[YT] Mencoba alternatif ke-' + this._altSkipIds.length + ':', alt.id, '|', alt.title);
+                    console.log('[YT][' + this.instanceId + '] Mencoba alternatif ke-' + this._altSkipIds.length + ':', alt.id, '|', alt.title);
                     this._altSkipIds.push(alt.id);
                     window.ytPlayer.loadVideoById(alt.id);
                 } else {
-                    console.warn('[YT] Tidak ada alternatif, skip ke lagu berikutnya');
+                    console.warn('[YT][' + this.instanceId + '] Tidak ada alternatif, skip ke lagu berikutnya');
                     this._altSkipIds = [];
                     this.nextTrack();
                 }
             } catch (e) {
-                console.error('[YT] Gagal mencari alternatif:', e);
+                console.error('[YT][' + this.instanceId + '] Gagal mencari alternatif:', e);
                 this._altSkipIds = [];
                 this.nextTrack();
             }
@@ -158,7 +222,7 @@ document.addEventListener('alpine:init', () => {
         onPlayerReady(event) {
             this.ytPlayerReady = true;
             window.ytPlayer.setVolume(this.volume);
-            console.log('[YT] Player siap!');
+            console.log('[YT][' + this.instanceId + '] Player siap!');
             if (this.pendingTrackId) {
                 window.ytPlayer.loadVideoById(this.pendingTrackId);
                 this.pendingTrackId = null;
@@ -166,23 +230,18 @@ document.addEventListener('alpine:init', () => {
         },
 
         onPlayerStateChange(event) {
+            console.log('[YT][' + this.instanceId + '] onPlayerStateChange. State:', event.data);
             if (event.data == YT.PlayerState.PLAYING) {
                 this.isPlaying = true;
                 this._altSkipIds = []; // Reset saat lagu berhasil diputar
                 this.duration = window.ytPlayer.getDuration();
-                if (this.ytInterval) clearInterval(this.ytInterval);
-                this.ytInterval = setInterval(() => {
-                    if (this.isPlaying && window.ytPlayer && window.ytPlayer.getCurrentTime) {
-                        this.currentTime = window.ytPlayer.getCurrentTime();
-                        this.progress = (this.currentTime / this.duration) * 100;
-                    }
-                }, 1000);
+                this.startTimer();
             } else if (event.data == YT.PlayerState.PAUSED) {
                 this.isPlaying = false;
-                if (this.ytInterval) clearInterval(this.ytInterval);
+                this.clearTimer();
             } else if (event.data == YT.PlayerState.ENDED) {
                 this.isPlaying = false;
-                if (this.ytInterval) clearInterval(this.ytInterval);
+                this.clearTimer();
                 this.trackEnded();
             }
         },
@@ -258,8 +317,8 @@ document.addEventListener('alpine:init', () => {
             this.currentTrack = track;
             const rawId = track.id || track.videoId;
 
-            if (this.ytInterval) clearInterval(this.ytInterval);
-            if (this.mockInterval) clearInterval(this.mockInterval);
+            this.clearTimer();
+            this.clearMockTimer();
 
             // Resolve YouTube Music internal IDs (lp-, lm- prefix) ke video ID biasa
             let trackId = rawId;
@@ -269,34 +328,34 @@ document.addEventListener('alpine:init', () => {
                     if (res.ok) {
                         const data = await res.json();
                         trackId = data.videoId || rawId;
-                        console.log('[YT] Resolved', rawId, '->', trackId);
+                        console.log('[YT][' + this.instanceId + '] Resolved', rawId, '->', trackId);
                     }
                 } catch (e) {
                     // Fallback: strip prefix
                     trackId = rawId.substring(3);
-                    console.warn('[YT] Resolve gagal, pakai fallback:', trackId);
+                    console.warn('[YT][' + this.instanceId + '] Resolve gagal, pakai fallback:', trackId);
                 }
             }
 
-            console.log('[YT] Mencoba memutar trackId:', trackId);
-            console.log('[YT] ytPlayerReady:', this.ytPlayerReady, '| window.ytPlayer:', window.ytPlayer);
+            console.log('[YT][' + this.instanceId + '] Mencoba memutar trackId:', trackId);
+            console.log('[YT][' + this.instanceId + '] ytPlayerReady:', this.ytPlayerReady, '| window.ytPlayer:', window.ytPlayer);
 
             if (this.ytPlayerReady && window.ytPlayer && typeof window.ytPlayer.loadVideoById === 'function') {
                 window.ytPlayer.loadVideoById(trackId);
             } else {
                 this.pendingTrackId = trackId;
-                console.log('[YT] Player belum siap, disimpan sebagai pending:', trackId);
+                console.log('[YT][' + this.instanceId + '] Player belum siap, disimpan sebagai pending:', trackId);
 
                 let retries = 0;
                 const retryInterval = setInterval(() => {
                     retries++;
                     if (window.ytPlayer && typeof window.ytPlayer.loadVideoById === 'function') {
-                        console.log('[YT] Player siap setelah', retries, 'percobaan, memutar...');
+                        console.log('[YT][' + this.instanceId + '] Player siap setelah', retries, 'percobaan, memutar...');
                         window.ytPlayer.loadVideoById(this.pendingTrackId || trackId);
                         this.pendingTrackId = null;
                         clearInterval(retryInterval);
                     } else if (retries >= 15) {
-                        console.error('[YT] Player gagal dimuat, fallback ke mockPlay');
+                        console.error('[YT][' + this.instanceId + '] Player gagal dimuat, fallback ke mockPlay');
                         clearInterval(retryInterval);
                         this.mockPlay();
                     }
@@ -331,10 +390,24 @@ document.addEventListener('alpine:init', () => {
         },
 
         togglePlay() {
-            if (!this.currentTrack || !window.ytPlayer) return;
-            if (this.isPlaying) {
+            console.log('[YT][' + this.instanceId + '] togglePlay called. isPlaying:', this.isPlaying);
+            if (!this.currentTrack || !window.ytPlayer) {
+                console.warn('[YT][' + this.instanceId + '] togglePlay aborted: no track or player');
+                return;
+            }
+
+            let isCurrentlyPlaying = this.isPlaying;
+            if (window.ytPlayer && typeof window.ytPlayer.getPlayerState === 'function') {
+                const state = window.ytPlayer.getPlayerState();
+                isCurrentlyPlaying = (state === 1 || state === 3);
+                console.log('[YT][' + this.instanceId + '] getPlayerState():', state, '-> isCurrentlyPlaying:', isCurrentlyPlaying);
+            }
+
+            if (isCurrentlyPlaying) {
+                console.log('[YT][' + this.instanceId + '] Call pauseVideo()');
                 window.ytPlayer.pauseVideo();
             } else {
+                console.log('[YT][' + this.instanceId + '] Call playVideo()');
                 window.ytPlayer.playVideo();
             }
         },
@@ -344,17 +417,50 @@ document.addEventListener('alpine:init', () => {
             this.duration = 180;
             this.currentTime = 0;
             this.progress = 0;
-            this.mockInterval = setInterval(() => {
+            this.startMockTimer();
+        },
+
+        startTimer() {
+            if (window.activeYtInterval) clearInterval(window.activeYtInterval);
+            window.activeYtInterval = setInterval(() => {
+                if (this.isPlaying && window.ytPlayer && window.ytPlayer.getCurrentTime) {
+                    this.currentTime = window.ytPlayer.getCurrentTime();
+                    this.progress = (this.currentTime / this.duration) * 100;
+                }
+            }, 1000);
+            this.ytInterval = window.activeYtInterval;
+        },
+
+        clearTimer() {
+            if (window.activeYtInterval) {
+                clearInterval(window.activeYtInterval);
+                window.activeYtInterval = null;
+            }
+            this.ytInterval = null;
+        },
+
+        startMockTimer() {
+            if (window.activeMockInterval) clearInterval(window.activeMockInterval);
+            window.activeMockInterval = setInterval(() => {
                 if (this.isPlaying) {
                     this.currentTime += 1;
                     this.progress = (this.currentTime / this.duration) * 100;
                     if (this.currentTime >= this.duration) {
                         this.isPlaying = false;
-                        clearInterval(this.mockInterval);
+                        this.clearMockTimer();
                         this.trackEnded();
                     }
                 }
             }, 1000);
+            this.mockInterval = window.activeMockInterval;
+        },
+
+        clearMockTimer() {
+            if (window.activeMockInterval) {
+                clearInterval(window.activeMockInterval);
+                window.activeMockInterval = null;
+            }
+            this.mockInterval = null;
         },
 
         hoverProgress(e) {
