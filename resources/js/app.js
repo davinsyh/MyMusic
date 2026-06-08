@@ -25,8 +25,31 @@ document.addEventListener('alpine:init', () => {
         instanceId: Math.random().toString(36).substring(7),
 
         init() {
-            window.activeAudioPlayer = this;
-            console.log('[YT][' + this.instanceId + '] Alpine component init()');
+            window.allAudioPlayers = window.allAudioPlayers || [];
+            // Bersihkan instansi yang sudah tidak terhubung ke DOM
+            window.allAudioPlayers = window.allAudioPlayers.filter(p => p.$el && p.$el.isConnected);
+
+            // Buat getter dinamis untuk activeAudioPlayer jika belum ada
+            if (!Object.getOwnPropertyDescriptor(window, 'activeAudioPlayer')) {
+                Object.defineProperty(window, 'activeAudioPlayer', {
+                    get: function() {
+                        if (!window.allAudioPlayers) return null;
+                        return window.allAudioPlayers.find(p => p.$el && p.$el.isConnected) || null;
+                    },
+                    configurable: true
+                });
+            }
+
+            // Daftarkan instansi saat ini
+            window.allAudioPlayers.push(this);
+
+            const activePlayer = window.activeAudioPlayer;
+            if (activePlayer && activePlayer !== this) {
+                console.log('[YT][' + this.instanceId + '] Instansi duplikat terdeteksi (sedang dalam transisi Livewire). Mengabaikan inisialisasi. Instansi aktif saat ini:', activePlayer.instanceId);
+                return;
+            }
+
+            console.log('[YT][' + this.instanceId + '] Alpine component init() - instansi utama diaktifkan');
 
             if (window.musicPlayerState) {
                 // Restore state dari global state
