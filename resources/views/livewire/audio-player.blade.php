@@ -358,24 +358,46 @@
                     if (this.mockInterval) clearInterval(this.mockInterval);
 
                     try {
-                        const response = await fetch(`/api/track/${trackId}`);
-                        const data = await response.json();
+                        // KUMPULAN SERVER BANTUAN (Dijalankan di Browser User untuk menghindari blokir AWS)
+                        const PIPED_INSTANCES = [
+                            "https://pipedapi.tokhmi.xyz",
+                            "https://pipedapi.kavin.rocks",
+                            "https://pipedapi.adminforge.de",
+                            "https://api.piped.projectsegfau.lt",
+                            "https://pipedapi.smnz.de"
+                        ];
 
-                        if (data && data.stream_url) {
-                            let finalStreamUrl = data.stream_url;
-                            @if(env('APP_ENV') === 'production')
-                                finalStreamUrl = '/stream/' + trackId;
-                            @endif
-                            
+                        let finalStreamUrl = null;
+                        
+                        // Coba satu per satu servernya sampai dapat suaranya
+                        for (let instance of PIPED_INSTANCES) {
+                            try {
+                                const response = await fetch(`${instance}/streams/${trackId}`);
+                                if (!response.ok) continue;
+                                
+                                const data = await response.json();
+                                if (data && data.audioStreams && data.audioStreams.length > 0) {
+                                    // Ambil kualitas suara tertinggi
+                                    data.audioStreams.sort((a, b) => b.bitrate - a.bitrate);
+                                    finalStreamUrl = data.audioStreams[0].url;
+                                    break;
+                                }
+                            } catch (err) {
+                                console.warn("Piped instance failed:", instance);
+                                continue;
+                            }
+                        }
+
+                        if (finalStreamUrl) {
                             this.$refs.audioEl.src = finalStreamUrl;
                             this.$refs.audioEl.play();
                             this.isPlaying = true;
                         } else {
-                            console.error('No stream URL returned');
+                            console.error('Semua server bantuan gagal memberikan lagu');
                             this.mockPlay();
                         }
                     } catch (e) {
-                        console.error(e);
+                        console.error("Gagal memutar lagu:", e);
                         this.mockPlay();
                     }
                 },
