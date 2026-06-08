@@ -24,3 +24,4 @@ Homestead.yaml
 Thumbs.db
 python-microservice/venv/
 typeui.sh copy/
+/bootstrap/cache/
