@@ -72,8 +72,48 @@ document.addEventListener('alpine:init', () => {
         },
 
         onPlayerError(event) {
-            console.error('[YT] Player Error:', event.data);
-            this.mockPlay();
+            // Error codes:
+            // 2   = Invalid video ID
+            // 5   = HTML5 player error
+            // 100 = Video not found / private
+            // 101 = Embedding not allowed
+            // 150 = Embedding not allowed (same as 101)
+            console.warn('[YT] Player Error code:', event.data, '| Track:', this.currentTrack?.title);
+
+            if ((event.data === 150 || event.data === 101 || event.data === 100) && this.currentTrack) {
+                // Video tidak bisa di-embed, cari alternatif
+                console.log('[YT] Mencari alternatif untuk:', this.currentTrack.title);
+                this.searchAndPlayAlternative(this.currentTrack);
+            } else {
+                this.mockPlay();
+            }
+        },
+
+        async searchAndPlayAlternative(track) {
+            try {
+                const query = encodeURIComponent(`${track.title} ${track.artist}`);
+                const res = await fetch(`/api/music/search?q=${query}`);
+                if (!res.ok) throw new Error('Search failed');
+                const data = await res.json();
+
+                // Cari video ID yang berbeda dari yang gagal
+                const currentId = track.id || track.videoId;
+                const alternatives = (data.data || []).filter(r =>
+                    r.id && r.id !== currentId && !r.id.startsWith('lp-') && !r.id.startsWith('lm-')
+                );
+
+                if (alternatives.length > 0) {
+                    const altId = alternatives[0].id;
+                    console.log('[YT] Mencoba alternatif:', altId, '|', alternatives[0].title);
+                    window.ytPlayer.loadVideoById(altId);
+                } else {
+                    console.warn('[YT] Tidak ada alternatif, skip ke lagu berikutnya');
+                    this.nextTrack();
+                }
+            } catch (e) {
+                console.error('[YT] Gagal mencari alternatif:', e);
+                this.nextTrack();
+            }
         },
 
         onPlayerReady(event) {

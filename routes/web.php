@@ -37,3 +37,10 @@ Route::get('/api/track/{id}', function ($id, \App\Services\MusicService $musicSe
 Route::get('/api/music/resolve/{id}', function ($id, \App\Services\MusicService $musicService) {
     return response()->json($musicService->resolveVideoId($id));
 });
+
+// Search API (used by frontend for fallback when embed is blocked)
+Route::get('/api/music/search', function (\Illuminate\Http\Request $request, \App\Services\MusicService $musicService) {
+    $q = $request->query('q', '');
+    if (!$q) return response()->json(['data' => []]);
+    return response()->json(['data' => $musicService->search($q)]);
+});
