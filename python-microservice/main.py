@@ -101,9 +101,10 @@ def get_track(video_id: str):
         ]
         
         stream_url = None
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         for instance in PIPED_INSTANCES:
             try:
-                res = requests.get(f"{instance}/streams/{video_id}", timeout=5)
+                res = requests.get(f"{instance}/streams/{video_id}", headers=headers, timeout=5)
                 if res.status_code == 200:
                     stream_data = res.json()
                     audio_streams = stream_data.get('audioStreams', [])
@@ -149,9 +150,10 @@ def stream_audio(video_id: str, request: Request):
         ]
         
         url = None
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         for instance in PIPED_INSTANCES:
             try:
-                res = requests.get(f"{instance}/streams/{video_id}", timeout=5)
+                res = requests.get(f"{instance}/streams/{video_id}", headers=headers, timeout=5)
                 if res.status_code == 200:
                     stream_data = res.json()
                     audio_streams = stream_data.get('audioStreams', [])
